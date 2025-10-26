@@ -2,21 +2,23 @@ import * as SQLite from 'expo-sqlite';
 
 let db = null;
 
+const generateId = () => Date.now().toString() + Math.floor(Math.random() * 1000);
+
 export const initDatabase = async () => {
   try {
     if (!db) {
       db = await SQLite.openDatabaseAsync('tasks.db');
-      
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS tasks (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          id TEXT PRIMARY KEY,
           email TEXT NOT NULL,
           status BOOLEAN DEFAULT 0,
           edit BOOLEAN DEFAULT 0,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          synced INTEGER DEFAULT 0
         );
       `);
-      
       console.log('Database initialized successfully');
     }
     return db;
@@ -26,7 +28,6 @@ export const initDatabase = async () => {
   }
 };
 
-// SỬA TÊN HÀM: gettasks -> getTasks
 export const getTasks = async () => {
   try {
     const database = await initDatabase();
@@ -41,23 +42,23 @@ export const getTasks = async () => {
 export const addTask = async (email) => {
   try {
     const database = await initDatabase();
-    const result = await database.runAsync(
-      'INSERT INTO tasks (email, status) VALUES (?, ?);',
-      [email, false]
+    const id = generateId();
+    await database.runAsync(
+      'INSERT INTO tasks (id, email, status, synced) VALUES (?, ?, ?, ?);',
+      [id, email, 0, 0]
     );
-    return result.lastInsertRowId;
+    return id;
   } catch (error) {
     console.log('Error adding task:', error);
     throw error;
   }
 };
 
-// SỬA TÊN HÀM: updatetaskstatus -> updateTaskStatus
 export const updateTaskStatus = async (id, status) => {
   try {
     const database = await initDatabase();
     const result = await database.runAsync(
-      'UPDATE tasks SET status = ? WHERE id = ?;',
+      'UPDATE tasks SET status = ?, synced = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?;',
       [status ? 1 : 0, id]
     );
     return result.changes;
@@ -71,7 +72,7 @@ export const updateTaskEmail = async (id, email) => {
   try {
     const database = await initDatabase();
     const result = await database.runAsync(
-      'UPDATE tasks SET email = ? WHERE id = ?;',
+      'UPDATE tasks SET email = ?, synced = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?;',
       [email, id]
     );
     return result.changes;
@@ -84,10 +85,7 @@ export const updateTaskEmail = async (id, email) => {
 export const deleteTask = async (id) => {
   try {
     const database = await initDatabase();
-    const result = await database.runAsync(
-      'DELETE FROM tasks WHERE id = ?;',
-      [id]
-    );
+    const result = await database.runAsync('DELETE FROM tasks WHERE id = ?;', [id]);
     return result.changes;
   } catch (error) {
     console.log('Error deleting task:', error);
@@ -95,24 +93,22 @@ export const deleteTask = async (id) => {
   }
 };
 
-// Hàm reset database
 export const resetDatabase = async () => {
   try {
     const database = await initDatabase();
     await database.execAsync('DROP TABLE IF EXISTS tasks;');
-    console.log('Table tasks dropped successfully');
-    
-    // Tạo lại bảng
     await database.execAsync(`
       CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
         email TEXT NOT NULL,
         status BOOLEAN DEFAULT 0,
         edit BOOLEAN DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        synced INTEGER DEFAULT 0
       );
     `);
-    console.log('Table tasks created successfully');
+    console.log('Database reset successfully');
   } catch (error) {
     console.log('Error resetting database:', error);
     throw error;
